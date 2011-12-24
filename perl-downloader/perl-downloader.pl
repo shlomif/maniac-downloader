@@ -6,22 +6,43 @@ use warnings;
 use Carp;
 use HTTP::Request;
 use POE qw(Component::Client::HTTP);
+use Getopt::Long;
+use URI;
+
+my @url_strings;
+
+GetOptions(
+    'urls=s' => \@url_strings,
+) or die "Error in inputting command-line parameters";
  
+my $url_s = shift(@url_strings);
+
+if (! length($url_s))
+{
+    die "No URLs specified.";
+}
+
+my $url = URI->new($url_s);
+
+my $url_basename = ($url->path_segments())[-1];
+
+if (! length $url_basename)
+{
+    die "Basename of the URL '$url_s' is invalid.";
+}
+
 POE::Component::Client::HTTP->spawn(
     Alias     => 'ua',                  # defaults to 'weeble'
     Timeout   => 3,                    # defaults to 180 seconds
     Streaming => 4096,                  # defaults to 0 (off)
 );
  
-# my $url = 'http://www.shlomifish.org/Files/files/video/Berry%20Sacharof%20-%20Mefaneh%20Maqom.flv';
-my $url = 'http://localhost:8080/l.bz2.part';
-
 POE::Session->create(
     inline_states => {
         _start => sub {
             my $heap = $_[HEAP];
 
-            open my $fh, '>', 'l.bz2'
+            open my $fh, '>', $url_basename
                 or Carp::confess( "Cannot open file for writing - $!");
 
             my $common_heap = { fh => $fh, bytes_written => 0, };
@@ -32,7 +53,7 @@ POE::Session->create(
                 'ua',        # posts to the 'ua' alias
                 'request',   # posts to ua's 'request' state
                 'response',  # which of our states will receive the response
-                HTTP::Request->new(GET => $url),    # an HTTP::Request object
+                HTTP::Request->new(GET => $url_s),    # an HTTP::Request object
             );
         },
         _stop => sub {},
