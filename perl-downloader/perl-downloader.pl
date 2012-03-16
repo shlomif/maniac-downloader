@@ -34,7 +34,7 @@ if (! length $url_basename)
 POE::Component::Client::HTTP->spawn(
     Alias     => 'ua',                  # defaults to 'weeble'
     Timeout   => 3,                    # defaults to 180 seconds
-    Streaming => 4096,                  # defaults to 0 (off)
+    Streaming => (4 * 1024),                  # defaults to 0 (off)
 );
  
 POE::Session->create(
