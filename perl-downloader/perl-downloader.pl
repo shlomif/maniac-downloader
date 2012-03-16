@@ -92,7 +92,7 @@ sub response_handler {
         {
             close ($heap->{common}->{fh});
             delete($heap->{common}->{fh});
-            $_[KERNEL]->stop();
+            $_[KERNEL]->post(ua => 'shutdown');
         }
     }
 }
