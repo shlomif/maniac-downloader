@@ -16,11 +16,6 @@ my $DEFAULT_NUM_CONNECTIONS = 4;
 
 has '_finished_condvar' => (is => 'rw');
 
-=head2 $self->run({argv => [@ARGV]})
-
-Run the application with @ARGV .
-
-=cut
 
 sub run
 {
@@ -119,3 +114,11 @@ sub run
 =head1 NAME
 
 App::ManiacDownloader - a maniac download accelerator.
+
+=head1 METHODS
+
+=head2 $self->run({argv => [@ARGV]})
+
+Run the application with @ARGV .
+
+=cut
