@@ -1,0 +1,8 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use App::ManiacDownloader;
+
+App::ManiacDownloader->new->run({ argv => [@ARGV] });

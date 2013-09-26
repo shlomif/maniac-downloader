@@ -74,7 +74,7 @@ sub run
 
             my $r = $ranges[$idx];
 
-            open my $fh, "+<", $url_basename,
+            open my $fh, "+>", $url_basename,
                 or die "${url_basename}: $!";
 
             sysseek( $fh, $r->{start}, SEEK_SET );
