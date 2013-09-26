@@ -10,6 +10,8 @@ use Getopt::Long qw/GetOptionsFromArray/;
 use File::Basename qw(basename);
 use Fcntl qw( SEEK_SET );
 
+use App::ManiacDownloader::_SegmentTask;
+
 our $VERSION = '0.0.1';
 
 my $DEFAULT_NUM_CONNECTIONS = 4;
@@ -58,7 +60,12 @@ sub run
         push @stops, $len;
 
         my @ranges = (
-            map { +{start => $stops[$_], end => ($stops[$_+1]) } }
+            map {
+                App::ManiacDownloader::_SegmentTask->new(
+                    _start => $stops[$_],
+                    _end => $stops[$_+1],
+                )
+            }
             0 .. ($num_connections-1)
         );
 
@@ -69,25 +76,30 @@ sub run
 
             my $r = $ranges[$idx];
 
-            open my $fh, "+>", $url_basename,
-                or die "${url_basename}: $!";
+            {
+                open my $fh, "+>", $url_basename,
+                    or die "${url_basename}: $!";
 
-            sysseek( $fh, $r->{start}, SEEK_SET );
+                $r->_fh($fh);
+            }
+
+            sysseek( $r->_fh, $r->_start, SEEK_SET );
 
             http_get $url,
                 headers => { 'Range'
-                    => sprintf("bytes=%d-%d", $r->{start}, $r->{end}-1)
+                    => sprintf("bytes=%d-%d", $r->_start, $r->_end-1)
                 },
                 on_body => sub {
                     my ($data, $hdr) = @_;
-                    my $written = syswrite($fh, $data);
+                    my $written = syswrite($r->_fh, $data);
                     if ($written != length($data))
                     {
                         die "Written bytes mismatch.";
                     }
-                    $r->{start} += length($data);
-                    if ($r->{start} >= $r->{end}) {
-                        close($fh);
+                    $r->_start($r->_start + length($data));
+                    if ($r->_start >= $r->_end) {
+                        close($r->_fh);
+                        $r->_fh(undef());
                         if (not --$remaining_connections) {
                             $self->_finished_condvar->send;
                         }
