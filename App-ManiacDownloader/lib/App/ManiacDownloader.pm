@@ -91,22 +91,14 @@ sub run
                 },
                 on_body => sub {
                     my ($data, $hdr) = @_;
-                    my $written = syswrite($r->_fh, $data);
-                    if ($written != length($data))
-                    {
-                        die "Written bytes mismatch.";
-                    }
-                    $r->_start($r->_start + length($data));
-                    if ($r->_start >= $r->_end) {
-                        close($r->_fh);
-                        $r->_fh(undef());
+
+                    my $ret = $r->_write_data(\$data);
+                    if (! $ret) {
                         if (not --$remaining_connections) {
                             $self->_finished_condvar->send;
                         }
-                        return 0;
                     }
-
-                    return 1;
+                    return $ret;
                 },
                 sub {
                     # Do nothing.
