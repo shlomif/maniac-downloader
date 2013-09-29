@@ -9,15 +9,67 @@ use AnyEvent::HTTP qw/http_head http_get/;
 use Getopt::Long qw/GetOptionsFromArray/;
 use File::Basename qw(basename);
 use Fcntl qw( SEEK_SET );
+use List::UtilsBy qw(max_by);
 
 use App::ManiacDownloader::_SegmentTask;
 
 our $VERSION = '0.0.1';
 
 my $DEFAULT_NUM_CONNECTIONS = 4;
+my $NUM_CONN_BYTES_THRESHOLD = 4_096 * 2;
 
 has '_finished_condvar' => (is => 'rw');
+has '_ranges' => (isa => 'ArrayRef', is => 'rw');
+has '_url' => (is => 'rw');
+has '_url_basename' => (isa => 'Str', is => 'rw');
+has '_remaining_connections' => (isa => 'Int', is => 'rw');
 
+sub _start_connection
+{
+    my ($self, $idx) = @_;
+
+    my $r = $self->_ranges->[$idx];
+
+    sysseek( $r->_fh, $r->_start, SEEK_SET );
+
+    http_get $self->_url,
+    headers => { 'Range'
+        => sprintf("bytes=%d-%d", $r->_start, $r->_end-1)
+    },
+    on_body => sub {
+        my ($data, $hdr) = @_;
+
+        my $ret = $r->_write_data(\$data);
+        if (! $ret)
+        {
+            my $largest_r = max_by { $r->_num_remaining } @{$self->_ranges};
+            if ($largest_r->_num_remaining < $NUM_CONN_BYTES_THRESHOLD)
+            {
+                $r->_close;
+                if (
+                    not
+                    $self->_remaining_connections(
+                        $self->_remaining_connections() - 1
+                    )
+                )
+                {
+                    $self->_finished_condvar->send;
+                }
+            }
+            else
+            {
+                $largest_r->_split_into($r);
+                $self->_start_connection($idx);
+            }
+        }
+        return $ret;
+    },
+    sub {
+        # Do nothing.
+        return;
+    }
+    ;
+}
 
 sub run
 {
@@ -39,8 +91,12 @@ sub run
         or die "No url given.";
 
     my $url = URI->new($url_s);
+
+    $self->_url($url);
     my $url_path = $url->path();
     my $url_basename = basename($url_path);
+
+    $self->_url_basename($url_basename);
 
     $self->_finished_condvar(
         scalar(AnyEvent->condvar)
@@ -69,42 +125,21 @@ sub run
             0 .. ($num_connections-1)
         );
 
-        my $remaining_connections = $num_connections;
-        foreach my $_proto_idx (0 .. $num_connections-1)
-        {
-            my $idx = $_proto_idx;
+        $self->_ranges(\@ranges);
 
+        $self->_remaining_connections($num_connections);
+        foreach my $idx (0 .. $num_connections-1)
+        {
             my $r = $ranges[$idx];
 
             {
-                open my $fh, "+>", $url_basename,
+                open my $fh, "+>", $self->_url_basename()
                     or die "${url_basename}: $!";
 
                 $r->_fh($fh);
             }
 
-            sysseek( $r->_fh, $r->_start, SEEK_SET );
-
-            http_get $url,
-                headers => { 'Range'
-                    => sprintf("bytes=%d-%d", $r->_start, $r->_end-1)
-                },
-                on_body => sub {
-                    my ($data, $hdr) = @_;
-
-                    my $ret = $r->_write_data(\$data);
-                    if (! $ret) {
-                        if (not --$remaining_connections) {
-                            $self->_finished_condvar->send;
-                        }
-                    }
-                    return $ret;
-                },
-                sub {
-                    # Do nothing.
-                    return;
-                }
-            ;
+            $self->_start_connection($idx);
         }
     };
 
