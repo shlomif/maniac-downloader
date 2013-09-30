@@ -133,7 +133,7 @@ sub run
             my $r = $ranges[$idx];
 
             {
-                open my $fh, "+>", $self->_url_basename()
+                open my $fh, "+>:raw", $self->_url_basename()
                     or die "${url_basename}: $!";
 
                 $r->_fh($fh);
