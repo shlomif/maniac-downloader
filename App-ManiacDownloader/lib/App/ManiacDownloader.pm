@@ -24,6 +24,13 @@ has '_url' => (is => 'rw');
 has '_url_basename' => (isa => 'Str', is => 'rw');
 has '_remaining_connections' => (isa => 'Int', is => 'rw');
 
+sub _downloading_path
+{
+    my ($self) = @_;
+
+    return $self->_url_basename . '.mdown-intermediate';
+}
+
 sub _start_connection
 {
     my ($self, $idx) = @_;
@@ -133,7 +140,7 @@ sub run
             my $r = $ranges[$idx];
 
             {
-                open my $fh, "+>:raw", $self->_url_basename()
+                open my $fh, "+>:raw", $self->_downloading_path()
                     or die "${url_basename}: $!";
 
                 $r->_fh($fh);
@@ -144,6 +151,11 @@ sub run
     };
 
     $self->_finished_condvar->recv;
+
+    if (! $self->_remaining_connections())
+    {
+        rename($self->_downloading_path(), $self->_url_basename());
+    }
 
     return;
 }
