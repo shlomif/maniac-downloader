@@ -23,6 +23,7 @@ has '_ranges' => (isa => 'ArrayRef', is => 'rw');
 has '_url' => (is => 'rw');
 has '_url_basename' => (isa => 'Str', is => 'rw');
 has '_remaining_connections' => (isa => 'Int', is => 'rw');
+has '_bytes_in_time_frame' => (isa => 'Int', is => 'rw', default => sub { return 0;});
 
 sub _downloading_path
 {
@@ -47,7 +48,12 @@ sub _start_connection
         my ($data, $hdr) = @_;
 
         my $ret = $r->_write_data(\$data);
-        if (! $ret)
+
+        $self->_bytes_in_time_frame(
+            $self->_bytes_in_time_frame + $ret->{num_written},
+        );
+        my $cont = $ret->{should_continue};
+        if (! $cont)
         {
             my $largest_r = max_by { $r->_num_remaining } @{$self->_ranges};
             if ($largest_r->_num_remaining < $NUM_CONN_BYTES_THRESHOLD)
@@ -69,7 +75,7 @@ sub _start_connection
                 $self->_start_connection($idx);
             }
         }
-        return $ret;
+        return $cont;
     },
     sub {
         # Do nothing.

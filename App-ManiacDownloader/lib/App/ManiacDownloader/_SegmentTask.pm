@@ -5,6 +5,8 @@ use warnings;
 
 use MooX qw/late/;
 
+use List::Util qw/min/;
+
 has ['_start', '_end'] => (is => 'rw', isa => 'Int',);
 has '_fh' => (is => 'rw',);
 
@@ -18,13 +20,14 @@ sub _write_data
         die "Written bytes mismatch.";
     }
 
-    $self->_start($self->_start + $written);
-    if ($self->_start >= $self->_end)
-    {
-        return 0;
-    }
+    my $init_start = $self->_start;
+    $self->_start($init_start + $written);
 
-    return 1;
+    return
+    {
+        should_continue => scalar($self->_start < $self->_end),
+        num_written => (min($self->_start, $self->_end) - $init_start),
+    };
 }
 
 sub _close
