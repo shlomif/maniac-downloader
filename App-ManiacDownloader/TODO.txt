@@ -1,0 +1,2 @@
+* Make sure that upon receiving a Ctrl+C signal, the program will write
+a continuation spec to a file, which will allow it to resume.
