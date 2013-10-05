@@ -23,7 +23,11 @@ has '_ranges' => (isa => 'ArrayRef', is => 'rw');
 has '_url' => (is => 'rw');
 has '_url_basename' => (isa => 'Str', is => 'rw');
 has '_remaining_connections' => (isa => 'Int', is => 'rw');
-has '_bytes_in_time_frame' => (isa => 'Int', is => 'rw', default => sub { return 0;});
+has ['_bytes_dled', '_bytes_dled_last_timer'] =>
+    (isa => 'Int', is => 'rw', default => sub { return 0;});
+has '_stats_timer' => (is => 'rw');
+has '_last_timer_time' => (is => 'rw', isa => 'Num');
+has '_len' => (is => 'rw', isa => 'Int');
 
 sub _downloading_path
 {
@@ -49,8 +53,8 @@ sub _start_connection
 
         my $ret = $r->_write_data(\$data);
 
-        $self->_bytes_in_time_frame(
-            $self->_bytes_in_time_frame + $ret->{num_written},
+        $self->_bytes_dled(
+            $self->_bytes_dled + $ret->{num_written},
         );
         my $cont = $ret->{should_continue};
         if (! $cont)
@@ -82,6 +86,27 @@ sub _start_connection
         return;
     }
     ;
+}
+
+sub _handle_stats_timer
+{
+    my ($self) = @_;
+
+    my $num_dloaded = $self->_bytes_dled - $self->_bytes_dled_last_timer;
+
+    my $time = AnyEvent->now;
+    my $last_time = $self->_last_timer_time;
+
+    printf "Downloaded %i%% (Currently: %.2fKB/s)\r",
+        int($self->_bytes_dled * 100 / $self->_len),
+        ($num_dloaded / (1024 * ($time-$last_time))),
+    ;
+    STDOUT->flush;
+
+    $self->_last_timer_time($time);
+    $self->_bytes_dled_last_timer($self->_bytes_dled);
+
+    return;
 }
 
 sub run
@@ -123,6 +148,8 @@ sub run
             die "Cannot find a content-length header.";
         }
 
+        $self->_len($len);
+
         my @stops = (map { int( ($len * $_) / $num_connections ) }
             0 .. ($num_connections-1));
 
@@ -154,9 +181,23 @@ sub run
 
             $self->_start_connection($idx);
         }
+
+        my $timer = AnyEvent->timer(
+            after => 3,
+            interval => 3,
+            cb => sub {
+                $self->_handle_stats_timer;
+                return;
+            },
+        );
+        $self->_last_timer_time(AnyEvent->time());
+        $self->_stats_timer($timer);
+
+        return;
     };
 
     $self->_finished_condvar->recv;
+    $self->_stats_timer(undef());
 
     if (! $self->_remaining_connections())
     {
