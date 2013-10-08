@@ -209,14 +209,54 @@ sub run
 
 1;
 
+=encoding utf8
+
 =head1 NAME
 
 App::ManiacDownloader - a maniac download accelerator.
+
+=head1 SYNOPSIS
+
+    # To download with 10 segments
+    $ mdown -k=10 http://path.to.my.url.tld/path-to-file.txt
+
+=head1 DESCRIPTION
+
+This is B<Maniac Downloader>, a maniac download accelerator. It is currently
+very incomplete (see the C<TODO.txt> file), but is still somewhat usable.
+Maniac Downloader is being written out of necessity out of proving to
+improve the download speed of files here (which I suspect is caused by a
+misconfiguration of my ISP's networking), and as a result, may prove of
+use elsewhere.
+
+=head2 The Secret Sauce
+
+The main improvement of Maniac Downloader over other downloader managers is
+that if a segment of the downloaded file finishes, then it splits the
+largest remaining segment, and starts another new download, so the slowest
+downloads won't delay the completion time by much.
 
 =head1 METHODS
 
 =head2 $self->run({argv => [@ARGV]})
 
 Run the application with @ARGV .
+
+=head1 SEE ALSO
+
+=head2 Asynchronous Programming FTW! 2 (with AnyEvent)
+
+L<http://www.slideshare.net/xSawyer/async-programmingftwanyevent>
+
+a talk by Sawyer X that introduced me to L<AnyEvent> of which I made use
+for Maniac Downloader.
+
+=head2 “Man Down”
+
+“Man Down” is a song by Rihanna, which happens to have the same initialism
+as Maniac Downloader, and which I happen to like, so feel free to check it
+out:
+
+L<http://www.youtube.com/watch?v=sEhy-RXkNo0>
 
 =cut
