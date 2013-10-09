@@ -1,4 +1,7 @@
 Revision history for App-ManiacDownloader
 
+v0.0.2  2013-10-09
+    - Add MANIFEST.SKIP and filter out the **/*~ files.
+
 v0.0.1  2013-09-26
     - First version, released on an unsuspecting world
