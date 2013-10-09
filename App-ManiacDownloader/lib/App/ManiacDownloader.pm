@@ -13,7 +13,7 @@ use List::UtilsBy qw(max_by);
 
 use App::ManiacDownloader::_SegmentTask;
 
-our $VERSION = '0.0.1';
+our $VERSION = '0.0.2';
 
 my $DEFAULT_NUM_CONNECTIONS = 4;
 my $NUM_CONN_BYTES_THRESHOLD = 4_096 * 2;
