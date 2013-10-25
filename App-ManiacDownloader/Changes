@@ -1,5 +1,7 @@
 Revision history for App-ManiacDownloader
 
+    - Add a Test::TrailingSpace test to dist.ini .
+
 v0.0.2  2013-10-09
     - Add MANIFEST.SKIP and filter out the **/*~ files.
 
