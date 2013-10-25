@@ -3,6 +3,8 @@ package App::ManiacDownloader;
 use strict;
 use warnings;
 
+use autodie;
+
 use MooX qw/late/;
 use URI;
 use AnyEvent::HTTP qw/http_head http_get/;
@@ -204,9 +206,23 @@ sub _init_from_len
     $self->_last_timer_time(AnyEvent->time());
     $self->_stats_timer($timer);
 
-    unlink($self->_resume_info_path());
+    {
+        no autodie;
+        unlink($self->_resume_info_path());
+    }
 
     return;
+}
+
+sub _abort_signal_handler
+{
+    my ($self) = @_;
+
+    open my $json_out_fh, '>:encoding(utf8)', $self->_resume_info_path();
+    print {$json_out_fh} encode_json($self->_serialize);
+    close ($json_out_fh);
+
+    exit(2);
 }
 
 sub run
@@ -260,26 +276,31 @@ sub run
                 num_connections => scalar(@$ranges_ref),
             }
         );
-        return;
+    }
+    else
+    {
+        http_head $url, sub {
+            my (undef, $headers) = @_;
+            my $len = $headers->{'content-length'};
+
+            if (!defined($len)) {
+                die "Cannot find a content-length header.";
+            }
+
+            $self->_len($len);
+            $self->_remaining_connections($num_connections);
+
+            return $self->_init_from_len(
+                {
+                    num_connections => $num_connections,
+                }
+            );
+        };
     }
 
-    http_head $url, sub {
-        my (undef, $headers) = @_;
-        my $len = $headers->{'content-length'};
-
-        if (!defined($len)) {
-            die "Cannot find a content-length header.";
-        }
-
-        $self->_len($len);
-        $self->_remaining_connections($num_connections);
-
-        return $self->_init_from_len(
-            {
-                num_connections => $num_connections,
-            }
-        );
-    };
+    my $signal_handler = sub { $self->_abort_signal_handler(); };
+    local $SIG{INT} = $signal_handler;
+    local $SIG{TERM} = $signal_handler;
 
     $self->_finished_condvar->recv;
     $self->_stats_timer(undef());
