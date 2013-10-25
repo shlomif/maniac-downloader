@@ -9,6 +9,7 @@ use List::Util qw/min/;
 
 has ['_start', '_end'] => (is => 'rw', isa => 'Int',);
 has '_fh' => (is => 'rw',);
+has 'is_active' => (is => 'rw', isa => 'Bool', default => 1);
 
 sub _write_data
 {
@@ -35,6 +36,7 @@ sub _close
     my ($self) = @_;
     close($self->_fh);
     $self->_fh(undef());
+    $self->is_active(0);
 
     return;
 }
