@@ -1,6 +1,8 @@
 Revision history for App-ManiacDownloader
 
     - Add a Test::TrailingSpace test to dist.ini .
+    - Make sure the application can be interrupted and resumed.
+        - it saves a JSON file upon getting an interrupt.
 
 v0.0.2  2013-10-09
     - Add MANIFEST.SKIP and filter out the **/*~ files.

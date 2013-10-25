@@ -10,6 +10,7 @@ use Getopt::Long qw/GetOptionsFromArray/;
 use File::Basename qw(basename);
 use Fcntl qw( SEEK_SET );
 use List::UtilsBy qw(max_by);
+use JSON qw(decode_json encode_json);
 
 use App::ManiacDownloader::_SegmentTask;
 
@@ -29,11 +30,31 @@ has '_stats_timer' => (is => 'rw');
 has '_last_timer_time' => (is => 'rw', isa => 'Num');
 has '_len' => (is => 'rw', isa => 'Int');
 
+sub _serialize
+{
+    my ($self) = @_;
+
+    return
+    +{
+        _ranges => [map { $_->_serialize() } @{$self->_ranges}],
+        _remaining_connections => $self->_remaining_connections,
+        _bytes_dled => $self->_bytes_dled,
+        _len => $self->_len,
+    };
+}
+
 sub _downloading_path
 {
     my ($self) = @_;
 
     return $self->_url_basename . '.mdown-intermediate';
+}
+
+sub _resume_info_path
+{
+    my ($self) = @_;
+
+    return $self->_url_basename . '.mdown-resume.json';
 }
 
 sub _start_connection
@@ -109,6 +130,85 @@ sub _handle_stats_timer
     return;
 }
 
+sub _slurp
+{
+    my $filename = shift;
+
+    open my $in, '<', $filename
+        or die "Cannot open '$filename' for slurping - $!";
+
+    local $/;
+    my $contents = <$in>;
+
+    close($in);
+
+    return $contents;
+}
+
+sub _init_from_len
+{
+    my ($self, $args) = @_;
+
+    my $num_connections = $args->{num_connections};
+    my $len = $self->_len;
+    my $url_basename = $self->_url_basename;
+
+    my @stops = (map { int( ($len * $_) / $num_connections ) }
+        0 .. ($num_connections-1));
+
+    push @stops, $len;
+
+    my @ranges = (
+        map {
+        App::ManiacDownloader::_SegmentTask->new(
+        _start => $stops[$_],
+        _end => $stops[$_+1],
+        )
+        }
+        0 .. ($num_connections-1)
+    );
+
+    $self->_ranges(\@ranges);
+
+    my $ranges_ref = $args->{ranges};
+    foreach my $idx (0 .. $num_connections-1)
+    {
+        my $r = $ranges[$idx];
+
+        if (defined($ranges_ref))
+        {
+            $r->_deserialize($ranges_ref->[$idx]);
+        }
+
+        if ($r->is_active)
+        {
+            {
+                open my $fh, "+>:raw", $self->_downloading_path()
+                    or die "${url_basename}: $!";
+
+                $r->_fh($fh);
+            }
+
+            $self->_start_connection($idx);
+        }
+    }
+
+    my $timer = AnyEvent->timer(
+        after => 3,
+        interval => 3,
+        cb => sub {
+            $self->_handle_stats_timer;
+            return;
+        },
+    );
+    $self->_last_timer_time(AnyEvent->time());
+    $self->_stats_timer($timer);
+
+    unlink($self->_resume_info_path());
+
+    return;
+}
+
 sub run
 {
     my ($self, $args) = @_;
@@ -136,9 +236,32 @@ sub run
 
     $self->_url_basename($url_basename);
 
+    if (-e $self->_url_basename)
+    {
+        print STDERR "File appears to have already been downloaded. Quitting.\n";
+        return;
+    }
+
     $self->_finished_condvar(
         scalar(AnyEvent->condvar)
     );
+
+    if (-e $self->_resume_info_path)
+    {
+        my $record = decode_json(_slurp($self->_resume_info_path));
+        $self->_len($record->{_len});
+        $self->_bytes_dled($record->{_bytes_dled});
+        $self->_bytes_dled_last_timer($self->_bytes_dled());
+        $self->_remaining_connections($record->{_remaining_connections});
+        my $ranges_ref = $record->{_ranges};
+        $self->_init_from_len(
+            {
+                ranges => $ranges_ref,
+                num_connections => scalar(@$ranges_ref),
+            }
+        );
+        return;
+    }
 
     http_head $url, sub {
         my (undef, $headers) = @_;
@@ -149,51 +272,13 @@ sub run
         }
 
         $self->_len($len);
-
-        my @stops = (map { int( ($len * $_) / $num_connections ) }
-            0 .. ($num_connections-1));
-
-        push @stops, $len;
-
-        my @ranges = (
-            map {
-                App::ManiacDownloader::_SegmentTask->new(
-                    _start => $stops[$_],
-                    _end => $stops[$_+1],
-                )
-            }
-            0 .. ($num_connections-1)
-        );
-
-        $self->_ranges(\@ranges);
-
         $self->_remaining_connections($num_connections);
-        foreach my $idx (0 .. $num_connections-1)
-        {
-            my $r = $ranges[$idx];
 
+        return $self->_init_from_len(
             {
-                open my $fh, "+>:raw", $self->_downloading_path()
-                    or die "${url_basename}: $!";
-
-                $r->_fh($fh);
+                num_connections => $num_connections,
             }
-
-            $self->_start_connection($idx);
-        }
-
-        my $timer = AnyEvent->timer(
-            after => 3,
-            interval => 3,
-            cb => sub {
-                $self->_handle_stats_timer;
-                return;
-            },
         );
-        $self->_last_timer_time(AnyEvent->time());
-        $self->_stats_timer($timer);
-
-        return;
     };
 
     $self->_finished_condvar->recv;
