@@ -1,7 +1,11 @@
-* Make sure that upon receiving a Ctrl+C signal, the program will write
-a continuation spec to a file, which will allow it to resume.
-
 * Make sure one can specify more than one URL to download (and assign
 finished segments to the new URLs).
 
 * Implement FTP URLs.
+
+DONE:
+=====
+
+* Make sure that upon receiving a Ctrl+C signal, the program will write
+a continuation spec to a file, which will allow it to resume.
+
