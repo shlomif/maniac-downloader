@@ -1,5 +1,10 @@
 Revision history for App-ManiacDownloader
 
+v0.0.4  2013-10-26
+    - Add MooX::late to the Prereqs.
+        - Its lack made the distribution fail.
+
+v0.0.3  2013-10-25
     - Add a Test::TrailingSpace test to dist.ini .
     - Make sure the application can be interrupted and resumed.
         - it saves a JSON file upon getting an interrupt.
