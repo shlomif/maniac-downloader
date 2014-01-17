@@ -16,7 +16,7 @@ use JSON qw(decode_json encode_json);
 
 use App::ManiacDownloader::_SegmentTask;
 
-our $VERSION = '0.0.4';
+our $VERSION = '0.0.5';
 
 my $DEFAULT_NUM_CONNECTIONS = 4;
 my $NUM_CONN_BYTES_THRESHOLD = 4_096 * 2;
@@ -147,6 +147,27 @@ sub _slurp
     return $contents;
 }
 
+sub _open_fh_for_read_write_without_clobbering
+{
+    my ($path, $url_basename) = @_;
+
+    # open with '+>:raw' will clobber the file.
+    # On the other hand, open with '+<:raw' won't create a new file if it
+    # does not exist.
+    # So we have to restort to this.
+    #
+    # For more information, see: http://perldoc.perl.org/perlopentut.html
+    {
+        open my $fh_temp, '+>>:raw', $path
+            or die "Cannot open '$path' for temp-creation. $!";
+        close($fh_temp);
+    }
+    open my $fh, "+<:raw", $path
+        or die "${url_basename}: $!";
+
+    return $fh;
+}
+
 sub _init_from_len
 {
     my ($self, $args) = @_;
@@ -185,10 +206,13 @@ sub _init_from_len
         if ($r->is_active)
         {
             {
-                open my $fh, "+>:raw", $self->_downloading_path()
-                    or die "${url_basename}: $!";
-
-                $r->_fh($fh);
+                $r->_fh(
+                    scalar(
+                        _open_fh_for_read_write_without_clobbering(
+                            $self->_downloading_path(), $url_basename,
+                        )
+                    )
+                );
             }
 
             $self->_start_connection($idx);

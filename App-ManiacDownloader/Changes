@@ -1,5 +1,10 @@
 Revision history for App-ManiacDownloader
 
+v0.0.5  2014-01-17
+    - Fix the resuming of downloads. The problem was that the opens
+    of the resumed buffer file, clobbered the existing file because we used
+    '+>' to open it.
+
 v0.0.4  2013-10-26
     - Add MooX::late to the Prereqs.
         - Its lack made the distribution fail.
