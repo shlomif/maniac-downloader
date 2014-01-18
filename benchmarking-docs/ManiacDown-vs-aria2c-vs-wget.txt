@@ -1,3 +1,8 @@
+These tests were performed on Shlomi Fish’s Core i3 x86-64 home machine running
+Mageia Linux 4 x86-64 , connected to bezeqint.net using an ADSL connection.
+
+==============================================================================
+
 ManiacDownloader:
 ------------------------------------------------------------------------------
 
