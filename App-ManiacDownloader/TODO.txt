@@ -1,3 +1,7 @@
+* Make sure that when a connection stalls for too long (reaches 0 KB/s)
+it will be restarted - otherwise sometimes we get 0 KB/s total download speed
+for too long.
+
 * Make sure one can specify more than one URL to download (and assign
 finished segments to the new URLs).
 
