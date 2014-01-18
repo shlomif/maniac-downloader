@@ -1,0 +1,57 @@
+ManiacDownloader:
+------------------------------------------------------------------------------
+
+shlomif[App-ManDown]:$trunk$ time perl -I App-ManiacDownloader/lib App-ManiacDownloader/bin/mdown -k=10 'http://mirror.isoc.org.il/pub/ubuntu-releases/13.10/ubuntu-13.10-desktop-amd64.iso' ; n --msg "Download finished."
+real    10m35.818s
+user    0m57.130s
+sys     0m11.834s
+shlomif[App-ManDown]:$trunk$ time perl -I App-ManiacDownloader/lib App-ManiacDownloader/bin/mdown -k=10 'http://mirror.isoc.org.il/pub/ubuntu-releases/13.10/ubuntu-13.10-desktop-amd64.iso' ; n --msg "Download finished."
+real    2m2.842s
+user    0m12.678s
+sys     0m2.526s
+shlomif[App-ManDown]:$trunk$
+
+* Required pressing Ctrl+C in the middle, due to halting, and recalling the
+command.
+
+* sha256sum was fine.
+
+==============================================================================
+
+Aria2c
+------------------------------------------------------------------------------
+
+shlomif[App-ManDown]:$trunk$ time aria2c --split=10 'http://mirror.isoc.org.il/pub/ubuntu-releases/13.10/ubuntu-13.10-desktop-amd64.iso' ; n --msg "Download finished."
+real    30m3.618s
+user    0m10.310s
+sys     0m10.031s
+
+
+[Output was very noisy on the terminal].
+
+* sha256sum was fine.
+
+==============================================================================
+
+wget
+------------------------------------------------------------------------------
+
+shlomif[App-ManDown]:$trunk$ time wget -c 'http://mirror.isoc.org.il/pub/ubuntu-releases/13.10/ubuntu-13.10-desktop-amd64.iso' ; n --msg "wget Download finished."
+--2014-01-18 18:47:52--  http://mirror.isoc.org.il/pub/ubuntu-releases/13.10/ubuntu-13.10-desktop-amd64.iso
+Resolving mirror.isoc.org.il (mirror.isoc.org.il)... 192.115.211.70
+Connecting to mirror.isoc.org.il (mirror.isoc.org.il)|192.115.211.70|:80... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 925892608 (883M) [application/octet-stream]
+Saving to: ‘ubuntu-13.10-desktop-amd64.iso’
+
+100%[======================================>] 925,892,608  670KB/s   in 30m 56s
+
+2014-01-18 19:18:48 (487 KB/s) - ‘ubuntu-13.10-desktop-amd64.iso’ saved [925892608/925892608]
+
+
+real    30m56.052s
+user    0m3.456s
+sys     0m20.340s
+shlomif[App-ManDown]:$trunk$
+
+* sha256sum was fine.
