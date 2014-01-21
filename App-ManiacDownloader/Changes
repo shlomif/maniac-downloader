@@ -1,5 +1,9 @@
 Revision history for App-ManiacDownloader
 
+v0.0.6  2014-01-21
+    - Minimum requirement on Getopt::Long.
+        - Fix test failures such as http://www.cpantesters.org/cpan/report/644372ae-81e9-11e3-b4a0-401c3071082f
+
 v0.0.5  2014-01-17
     - Fix the resuming of downloads. The problem was that the opens
     of the resumed buffer file, clobbered the existing file because we used
