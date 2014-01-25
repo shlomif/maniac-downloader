@@ -1,5 +1,9 @@
 Revision history for App-ManiacDownloader
 
+v0.0.7  2014-01-25
+    - Minimum requirement on perl-5.012.
+        - Kwalitee / CPANTS
+
 v0.0.6  2014-01-21
     - Minimum requirement on Getopt::Long.
         - Fix test failures such as http://www.cpantesters.org/cpan/report/644372ae-81e9-11e3-b4a0-401c3071082f

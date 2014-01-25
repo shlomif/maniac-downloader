@@ -3,6 +3,8 @@ package App::ManiacDownloader;
 use strict;
 use warnings;
 
+use 5.012;
+
 use autodie;
 
 use MooX qw/late/;
