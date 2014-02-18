@@ -11,6 +11,8 @@ has ['_start', '_end'] => (is => 'rw', isa => 'Int',);
 has '_fh' => (is => 'rw',);
 has 'is_active' => (is => 'rw', isa => 'Bool', default => 1);
 
+has '_downloaded' => (is => 'rw', isa => 'App::ManiacDownloader::_BytesDownloaded', default => sub { return App::ManiacDownloader::_BytesDownloaded->new; }, handles => ['_flush_and_report'],);
+
 sub _serialize
 {
     my ($self) = @_;
@@ -43,6 +45,8 @@ sub _write_data
     {
         die "Written bytes mismatch.";
     }
+
+    $self->_downloaded->_add($written);
 
     my $init_start = $self->_start;
     $self->_start($init_start + $written);

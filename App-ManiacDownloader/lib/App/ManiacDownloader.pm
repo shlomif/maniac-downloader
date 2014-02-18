@@ -17,6 +17,7 @@ use List::UtilsBy qw(max_by);
 use JSON qw(decode_json encode_json);
 
 use App::ManiacDownloader::_SegmentTask;
+use App::ManiacDownloader::_BytesDownloaded;
 
 our $VERSION = '0.0.8';
 
@@ -28,11 +29,10 @@ has '_ranges' => (isa => 'ArrayRef', is => 'rw');
 has '_url' => (is => 'rw');
 has '_url_basename' => (isa => 'Str', is => 'rw');
 has '_remaining_connections' => (isa => 'Int', is => 'rw');
-has ['_bytes_dled', '_bytes_dled_last_timer'] =>
-    (isa => 'Int', is => 'rw', default => sub { return 0;});
 has '_stats_timer' => (is => 'rw');
 has '_last_timer_time' => (is => 'rw', isa => 'Num');
 has '_len' => (is => 'rw', isa => 'Int');
+has '_downloaded' => (is => 'rw', isa => 'App::ManiacDownloader::_BytesDownloaded', default => sub { return App::ManiacDownloader::_BytesDownloaded->new; });
 
 sub _serialize
 {
@@ -42,7 +42,7 @@ sub _serialize
     +{
         _ranges => [map { $_->_serialize() } @{$self->_ranges}],
         _remaining_connections => $self->_remaining_connections,
-        _bytes_dled => $self->_bytes_dled,
+        _bytes_dled => $self->_downloaded->_total_downloaded,
         _len => $self->_len,
     };
 }
@@ -78,9 +78,8 @@ sub _start_connection
 
         my $ret = $r->_write_data(\$data);
 
-        $self->_bytes_dled(
-            $self->_bytes_dled + $ret->{num_written},
-        );
+        $self->_downloaded->_add($ret->{num_written});
+
         my $cont = $ret->{should_continue};
         if (! $cont)
         {
@@ -117,19 +116,24 @@ sub _handle_stats_timer
 {
     my ($self) = @_;
 
-    my $num_dloaded = $self->_bytes_dled - $self->_bytes_dled_last_timer;
+    my ($num_dloaded, $total_downloaded)
+        = $self->_downloaded->_flush_and_report;
+
+    foreach my $r (@{$self->_ranges()})
+    {
+        $r->_flush_and_report;
+    }
 
     my $time = AnyEvent->now;
     my $last_time = $self->_last_timer_time;
 
     printf "Downloaded %i%% (Currently: %.2fKB/s)\r",
-        int($self->_bytes_dled * 100 / $self->_len),
+        int($total_downloaded * 100 / $self->_len),
         ($num_dloaded / (1024 * ($time-$last_time))),
     ;
     STDOUT->flush;
 
     $self->_last_timer_time($time);
-    $self->_bytes_dled_last_timer($self->_bytes_dled);
 
     return;
 }
@@ -292,8 +296,7 @@ sub run
     {
         my $record = decode_json(_slurp($self->_resume_info_path));
         $self->_len($record->{_len});
-        $self->_bytes_dled($record->{_bytes_dled});
-        $self->_bytes_dled_last_timer($self->_bytes_dled());
+        $self->_downloaded->_my_init($record->{_bytes_dled});
         $self->_remaining_connections($record->{_remaining_connections});
         my $ranges_ref = $record->{_ranges};
         $self->_init_from_len(
