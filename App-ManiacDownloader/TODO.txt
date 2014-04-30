@@ -1,7 +1,3 @@
-* Make sure that when a connection stalls for too long (reaches 0 KB/s)
-it will be restarted - otherwise sometimes we get 0 KB/s total download speed
-for too long.
-
 * Make sure one can specify more than one URL to download (and assign
 finished segments to the new URLs).
 
@@ -12,4 +8,8 @@ DONE:
 
 * Make sure that upon receiving a Ctrl+C signal, the program will write
 a continuation spec to a file, which will allow it to resume.
+
+* Make sure that when a connection stalls for too long (reaches 0 KB/s)
+it will be restarted - otherwise sometimes we get 0 KB/s total download speed
+for too long.
 
