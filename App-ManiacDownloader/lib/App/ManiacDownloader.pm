@@ -171,6 +171,8 @@ sub _slurp
     return $contents;
 }
 
+use Fcntl qw( O_CREAT O_RDWR );
+
 sub _open_fh_for_read_write_without_clobbering
 {
     my ($path, $url_basename) = @_;
@@ -181,12 +183,15 @@ sub _open_fh_for_read_write_without_clobbering
     # So we have to restort to this.
     #
     # For more information, see: http://perldoc.perl.org/perlopentut.html
-    {
-        open my $fh_temp, '+>>:raw', $path
-            or die "Cannot open '$path' for temp-creation. $!";
-        close($fh_temp);
-    }
-    open my $fh, "+<:raw", $path
+    #
+    # And:
+    #
+    # http://blogs.perl.org/users/shlomi_fish/2014/01/tech-tip-opening-a-file-for-readwrite-without-clobbering-it.html
+    #
+    # Thanks to Steven Haryanto for the better tip.
+    #
+    my $fh;
+    sysopen($fh, $path, O_RDWR|O_CREAT)
         or die "${url_basename}: $!";
 
     return $fh;
