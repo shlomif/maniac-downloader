@@ -10,8 +10,11 @@ use List::Util qw/min/;
 has ['_start', '_end'] => (is => 'rw', isa => 'Int',);
 has '_fh' => (is => 'rw',);
 has 'is_active' => (is => 'rw', isa => 'Bool', default => 1);
-
 has '_downloaded' => (is => 'rw', isa => 'App::ManiacDownloader::_BytesDownloaded', default => sub { return App::ManiacDownloader::_BytesDownloaded->new; }, handles => ['_flush_and_report'],);
+
+has '_guard' => (is => 'rw');
+
+has '_count_checks_without_download' => (is => 'rw', isa => 'Int', default => 0);
 
 sub _serialize
 {
@@ -51,6 +54,8 @@ sub _write_data
     my $init_start = $self->_start;
     $self->_start($init_start + $written);
 
+    $self->_count_checks_without_download(0);
+
     return
     {
         should_continue => scalar($self->_start < $self->_end),
@@ -64,6 +69,7 @@ sub _close
     close($self->_fh);
     $self->_fh(undef());
     $self->is_active(0);
+    $self->_guard('');
 
     return;
 }
@@ -86,6 +92,16 @@ sub _split_into
     return;
 }
 
+sub _increment_check_count
+{
+    my ($self, $max_checks) = @_;
+
+    $self->_count_checks_without_download(
+        $self->_count_checks_without_download() + 1
+    );
+
+    return ($self->_count_checks_without_download >= $max_checks);
+}
 
 1;
 

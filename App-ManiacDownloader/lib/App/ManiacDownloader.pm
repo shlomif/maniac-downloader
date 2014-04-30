@@ -69,11 +69,9 @@ sub _start_connection
 
     sysseek( $r->_fh, $r->_start, SEEK_SET );
 
-    http_get $self->_url,
-    headers => { 'Range'
-        => sprintf("bytes=%d-%d", $r->_start, $r->_end-1)
-    },
-    on_body => sub {
+    # We do these to make sure the cancellation guard does not get
+    # preserved because it's in the context of the closures.
+    my $on_body = sub {
         my ($data, $hdr) = @_;
 
         my $ret = $r->_write_data(\$data);
@@ -104,13 +102,25 @@ sub _start_connection
             }
         }
         return $cont;
+    };
+
+    my $final_cb = sub { return ; };
+
+    my $guard = http_get $self->_url,
+    headers => { 'Range'
+        => sprintf("bytes=%d-%d", $r->_start, $r->_end-1)
     },
-    sub {
-        # Do nothing.
-        return;
-    }
-    ;
+    on_body => $on_body,
+    $final_cb;
+
+    $r->_guard($guard);
+
+    $guard = '';
+
+    return;
 }
+
+my $MAX_CHECKS = 6;
 
 sub _handle_stats_timer
 {
@@ -119,9 +129,17 @@ sub _handle_stats_timer
     my ($num_dloaded, $total_downloaded)
         = $self->_downloaded->_flush_and_report;
 
-    foreach my $r (@{$self->_ranges()})
+    my $_ranges = $self->_ranges;
+    for my $idx (0 .. $#$_ranges)
     {
+        my $r = $_ranges->[$idx];
+
         $r->_flush_and_report;
+        if ($r->is_active && $r->_increment_check_count($MAX_CHECKS))
+        {
+            $r->_guard('');
+            $self->_start_connection($idx);
+        }
     }
 
     my $time = AnyEvent->now;
