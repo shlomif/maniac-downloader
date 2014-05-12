@@ -9,7 +9,9 @@ use autodie;
 
 use MooX qw/late/;
 use URI;
-use AnyEvent::HTTP qw/http_head http_get/;
+use IO::Async::Loop;
+use IO::Async::Timer::Periodic;
+use Net::Async::HTTP;
 use Getopt::Long qw/GetOptionsFromArray/;
 use File::Basename qw(basename);
 use Fcntl qw( SEEK_SET );
@@ -24,7 +26,8 @@ our $VERSION = '0.0.10';
 my $DEFAULT_NUM_CONNECTIONS = 4;
 my $NUM_CONN_BYTES_THRESHOLD = 4_096 * 2;
 
-has '_finished_condvar' => (is => 'rw');
+has '_net_async_http' => (is => 'rw');
+has '_loop' => (is => 'rw');
 has '_ranges' => (isa => 'ArrayRef', is => 'rw');
 has '_url' => (is => 'rw');
 has '_url_basename' => (isa => 'Str', is => 'rw');
@@ -72,7 +75,13 @@ sub _start_connection
     # We do these to make sure the cancellation guard does not get
     # preserved because it's in the context of the closures.
     my $on_body = sub {
-        my ($data, $hdr) = @_;
+        my ($data) = @_;
+
+        # The end of the request.
+        if (!defined($data))
+        {
+            return;
+        }
 
         my $ret = $r->_write_data(\$data);
 
@@ -92,7 +101,7 @@ sub _start_connection
                     )
                 )
                 {
-                    $self->_finished_condvar->send;
+                    $self->_loop->stop();
                 }
             }
             else
@@ -104,14 +113,13 @@ sub _start_connection
         return $cont;
     };
 
-    my $final_cb = sub { return ; };
+    my $req = HTTP::Request->new(GET => $self->_url);
+    $req->header('Range' => sprintf("bytes=%d-%d", $r->_start, $r->_end-1));
 
-    my $guard = http_get $self->_url,
-    headers => { 'Range'
-        => sprintf("bytes=%d-%d", $r->_start, $r->_end-1)
-    },
-    on_body => $on_body,
-    $final_cb;
+    my $guard = $self->_net_async_http->do_request(
+        request => $req,
+        on_header => sub { return $on_body; },
+    );
 
     $r->_guard($guard);
 
@@ -126,6 +134,8 @@ sub _handle_stats_timer
 {
     my ($self) = @_;
 
+    my $loop = $self->_loop;
+
     my ($num_dloaded, $total_downloaded)
         = $self->_downloaded->_flush_and_report;
 
@@ -137,12 +147,16 @@ sub _handle_stats_timer
         $r->_flush_and_report;
         if ($r->is_active && $r->_increment_check_count($MAX_CHECKS))
         {
+            if (! $r->_guard->is_cancelled() )
+            {
+                $r->_guard->cancel();
+            }
             $r->_guard('');
             $self->_start_connection($idx);
         }
     }
 
-    my $time = AnyEvent->now;
+    my $time = $loop->time;
     my $last_time = $self->_last_timer_time;
 
     printf "Downloaded %i%% (Currently: %.2fKB/s)\r",
@@ -248,15 +262,20 @@ sub _init_from_len
         }
     }
 
-    my $timer = AnyEvent->timer(
-        after => 3,
+    my $timer = IO::Async::Timer::Periodic->new(
         interval => 3,
-        cb => sub {
+        on_tick => sub {
             $self->_handle_stats_timer;
             return;
         },
     );
-    $self->_last_timer_time(AnyEvent->time());
+
+    my $loop = $self->_loop;
+
+    $timer->start;
+    $loop->add($timer);
+
+    $self->_last_timer_time($loop->time());
     $self->_stats_timer($timer);
 
     {
@@ -281,6 +300,16 @@ sub _abort_signal_handler
 sub run
 {
     my ($self, $args) = @_;
+
+    my $loop = IO::Async::Loop->new;
+
+    $self->_loop($loop);
+
+    my $http = Net::Async::HTTP->new();
+
+    $self->_net_async_http($http);
+
+    $loop->add($http);
 
     my $num_connections = $DEFAULT_NUM_CONNECTIONS;
 
@@ -311,10 +340,6 @@ sub run
         return;
     }
 
-    $self->_finished_condvar(
-        scalar(AnyEvent->condvar)
-    );
-
     if (-e $self->_resume_info_path)
     {
         my $record = decode_json(_slurp($self->_resume_info_path));
@@ -331,9 +356,9 @@ sub run
     }
     else
     {
-        http_head $url, sub {
-            my (undef, $headers) = @_;
-            my $len = $headers->{'content-length'};
+        $self->_net_async_http->HEAD($url, on_response => sub {
+            my ($response) = @_;
+            my $len = $response->header('Content-Length');
 
             if (!defined($len)) {
                 die "Cannot find a content-length header.";
@@ -347,14 +372,15 @@ sub run
                     num_connections => $num_connections,
                 }
             );
-        };
+        },
+        );
     }
 
     my $signal_handler = sub { $self->_abort_signal_handler(); };
     local $SIG{INT} = $signal_handler;
     local $SIG{TERM} = $signal_handler;
 
-    $self->_finished_condvar->recv;
+    $loop->run;
     $self->_stats_timer(undef());
 
     if (! $self->_remaining_connections())
