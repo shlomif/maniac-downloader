@@ -10,6 +10,7 @@ use autodie;
 use MooX qw/late/;
 use URI;
 use AnyEvent::HTTP qw/http_head http_get/;
+use AnyEvent::FTP::Client;
 use Getopt::Long qw/GetOptionsFromArray/;
 use File::Basename qw(basename);
 use Fcntl qw( SEEK_SET );
@@ -27,6 +28,7 @@ my $NUM_CONN_BYTES_THRESHOLD = 4_096 * 2;
 has '_finished_condvar' => (is => 'rw');
 has '_ranges' => (isa => 'ArrayRef', is => 'rw');
 has '_url' => (is => 'rw');
+has '_url_path' => (isa => 'Str', is => 'rw');
 has '_url_basename' => (isa => 'Str', is => 'rw');
 has '_remaining_connections' => (isa => 'Int', is => 'rw');
 has '_stats_timer' => (is => 'rw');
@@ -74,6 +76,12 @@ sub _start_connection
     my $on_body = sub {
         my ($data, $hdr) = @_;
 
+        # Stale connection - probably AnyEvent::FTP::Client after a quit.
+        if (! $r->is_active)
+        {
+            return;
+        }
+
         my $ret = $r->_write_data(\$data);
 
         $self->_downloaded->_add($ret->{num_written});
@@ -81,6 +89,10 @@ sub _start_connection
         my $cont = $ret->{should_continue};
         if (! $cont)
         {
+            if ($self->_url->scheme eq 'ftp')
+            {
+                $r->_guard->quit;
+            }
             my $largest_r = max_by { $r->_num_remaining } @{$self->_ranges};
             if ($largest_r->_num_remaining < $NUM_CONN_BYTES_THRESHOLD)
             {
@@ -106,16 +118,39 @@ sub _start_connection
 
     my $final_cb = sub { return ; };
 
-    my $guard = http_get $self->_url,
-    headers => { 'Range'
-        => sprintf("bytes=%d-%d", $r->_start, $r->_end-1)
-    },
-    on_body => $on_body,
-    $final_cb;
+    my $url = $self->_url;
+    if ($url->scheme eq 'ftp')
+    {
+        my $ftp = AnyEvent::FTP::Client->new( passive => 1 );
+        $r->_guard($ftp);
+        $ftp->connect($url->host, $url->port)->cb(sub {
+                $ftp->login($url->user, $url->password)->cb(sub {
+                        $ftp->type('I')->cb(sub {
+                                $ftp->retr(
+                                    $self->_url_path,
+                                    $on_body,
+                                    restart => $r->_start,
+                                );
+                            }
+                        );
+                    }
+                );
+            }
+        );
+    }
+    else
+    {
+        my $guard = http_get $url,
+        headers => { 'Range'
+            => sprintf("bytes=%d-%d", $r->_start, $r->_end-1)
+        },
+        on_body => $on_body,
+        $final_cb;
 
-    $r->_guard($guard);
+        $r->_guard($guard);
 
-    $guard = '';
+        $guard = '';
+    }
 
     return;
 }
@@ -195,6 +230,24 @@ sub _open_fh_for_read_write_without_clobbering
         or die "${url_basename}: $!";
 
     return $fh;
+}
+
+sub _with_len_and_num_connections
+{
+    my ($self, $len, $num_connections) = @_;
+
+    if (!defined($len)) {
+        die "Cannot find a content-length header.";
+    }
+
+    $self->_len($len);
+    $self->_remaining_connections($num_connections);
+
+    return $self->_init_from_len(
+        {
+            num_connections => $num_connections,
+        }
+    );
 }
 
 sub _init_from_len
@@ -298,11 +351,12 @@ sub run
         or die "No url given.";
 
     my $url = URI->new($url_s);
-
     $self->_url($url);
-    my $url_path = $url->path();
-    my $url_basename = basename($url_path);
 
+    my $url_path = $url->path();
+    $self->_url_path($url_path);
+
+    my $url_basename = basename($url_path);
     $self->_url_basename($url_basename);
 
     if (-e $self->_url_basename)
@@ -331,23 +385,34 @@ sub run
     }
     else
     {
-        http_head $url, sub {
-            my (undef, $headers) = @_;
-            my $len = $headers->{'content-length'};
+        if ($url->scheme eq 'ftp')
+        {
+            my $ftp = AnyEvent::FTP::Client->new( passive => 1 );
+            $ftp->connect($url->host, $url->port)->recv;
+            $ftp->login($url->user, $url->password)->recv;
+            $ftp->type('I')->recv;
+            $ftp->size( $self->_url_path)->cb(
+                sub {
+                    my $len = shift->recv;
 
-            if (!defined($len)) {
-                die "Cannot find a content-length header.";
-            }
+                    $ftp->quit;
+                    undef($ftp);
 
-            $self->_len($len);
-            $self->_remaining_connections($num_connections);
-
-            return $self->_init_from_len(
-                {
-                    num_connections => $num_connections,
+                    return $self->_with_len_and_num_connections(
+                        $len, $num_connections
+                    );
                 }
             );
-        };
+        }
+        else
+        {
+            http_head $url, sub {
+                my (undef, $headers) = @_;
+                my $len = $headers->{'content-length'};
+
+                return $self->_with_len_and_num_connections($len, $num_connections);
+            };
+        }
     }
 
     my $signal_handler = sub { $self->_abort_signal_handler(); };
