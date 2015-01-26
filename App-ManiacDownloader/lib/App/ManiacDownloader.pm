@@ -30,6 +30,7 @@ has '_ranges' => (isa => 'ArrayRef', is => 'rw');
 has '_url' => (is => 'rw');
 has '_url_path' => (isa => 'Str', is => 'rw');
 has '_url_basename' => (isa => 'Str', is => 'rw');
+has '_is_ftp' => (isa => 'Bool', is => 'rw');
 has '_remaining_connections' => (isa => 'Int', is => 'rw');
 has '_stats_timer' => (is => 'rw');
 has '_last_timer_time' => (is => 'rw', isa => 'Num');
@@ -71,6 +72,8 @@ sub _start_connection
 
     sysseek( $r->_fh, $r->_start, SEEK_SET );
 
+    my $is_ftp = $self->_is_ftp;
+
     # We do these to make sure the cancellation guard does not get
     # preserved because it's in the context of the closures.
     my $on_body = sub {
@@ -89,7 +92,7 @@ sub _start_connection
         my $cont = $ret->{should_continue};
         if (! $cont)
         {
-            if ($self->_url->scheme eq 'ftp')
+            if ($is_ftp)
             {
                 $r->_guard->quit;
             }
@@ -119,7 +122,7 @@ sub _start_connection
     my $final_cb = sub { return ; };
 
     my $url = $self->_url;
-    if ($url->scheme eq 'ftp')
+    if ($is_ftp)
     {
         my $ftp = AnyEvent::FTP::Client->new( passive => 1 );
         $r->_guard($ftp);
@@ -359,6 +362,9 @@ sub run
     my $url_basename = basename($url_path);
     $self->_url_basename($url_basename);
 
+    my $is_ftp = ($url->scheme eq 'ftp');
+    $self->_is_ftp($is_ftp);
+
     if (-e $self->_url_basename)
     {
         print STDERR "File appears to have already been downloaded. Quitting.\n";
@@ -385,7 +391,7 @@ sub run
     }
     else
     {
-        if ($url->scheme eq 'ftp')
+        if ($is_ftp)
         {
             my $ftp = AnyEvent::FTP::Client->new( passive => 1 );
             $ftp->connect($url->host, $url->port)->recv;
