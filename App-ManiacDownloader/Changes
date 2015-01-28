@@ -2,6 +2,7 @@ Revision history for App-ManiacDownloader
 
 v0.0.11     Unknown
     - Add support for downloading FTP URLs.
+    - Convert from JSON.pm to JSON::MaybeXS.
 
 v0.0.10     2014-04-30
     - Convert _open_fh_for_read_write_without_clobbering to a single sysopen

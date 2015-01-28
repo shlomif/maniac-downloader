@@ -15,7 +15,7 @@ use Getopt::Long qw/GetOptionsFromArray/;
 use File::Basename qw(basename);
 use Fcntl qw( SEEK_SET );
 use List::UtilsBy qw(max_by);
-use JSON qw(decode_json encode_json);
+use JSON::MaybeXS qw(decode_json encode_json);
 
 use App::ManiacDownloader::_SegmentTask;
 use App::ManiacDownloader::_BytesDownloaded;
