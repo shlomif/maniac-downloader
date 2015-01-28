@@ -1,6 +1,6 @@
 Revision history for App-ManiacDownloader
 
-v0.0.11     Unknown
+v0.0.11     2015-01-28
     - Add support for downloading FTP URLs.
     - Convert from JSON.pm to JSON::MaybeXS.
 

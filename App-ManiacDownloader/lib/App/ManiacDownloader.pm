@@ -20,7 +20,7 @@ use JSON::MaybeXS qw(decode_json encode_json);
 use App::ManiacDownloader::_SegmentTask;
 use App::ManiacDownloader::_BytesDownloaded;
 
-our $VERSION = '0.0.10';
+our $VERSION = '0.0.11';
 
 my $DEFAULT_NUM_CONNECTIONS = 4;
 my $NUM_CONN_BYTES_THRESHOLD = 4_096 * 2;
