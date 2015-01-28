@@ -11,6 +11,7 @@ has ['_start', '_end'] => (is => 'rw', isa => 'Int',);
 has '_fh' => (is => 'rw',);
 has 'is_active' => (is => 'rw', isa => 'Bool', default => 1);
 has '_downloaded' => (is => 'rw', isa => 'App::ManiacDownloader::_BytesDownloaded', default => sub { return App::ManiacDownloader::_BytesDownloaded->new; }, handles => ['_flush_and_report'],);
+has '_active_seq' => (is => 'rw', isa => 'Int', default => 0);
 
 has '_guard' => (is => 'rw');
 
@@ -101,6 +102,20 @@ sub _increment_check_count
     );
 
     return ($self->_count_checks_without_download >= $max_checks);
+}
+
+sub _get_next_active_seq
+{
+    my ($self) = @_;
+
+    return $self->_active_seq($self->_active_seq() + 1);
+}
+
+sub _is_right_active_seq
+{
+    my ($self, $right_active_seq) = @_;
+
+    return ($self->_active_seq() == $right_active_seq);
 }
 
 1;

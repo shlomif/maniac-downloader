@@ -77,10 +77,11 @@ sub _start_connection
     # We do these to make sure the cancellation guard does not get
     # preserved because it's in the context of the closures.
     my $on_body = sub {
-        my ($data, $hdr) = @_;
+        my ($active_seq, $data, $hdr) = @_;
 
-        # Stale connection - probably AnyEvent::FTP::Client after a quit.
-        if (! $r->is_active)
+        # Stale or wrong connection - probably AnyEvent::FTP::Client after a
+        # quit.
+        if ((! $r->_is_right_active_seq($active_seq)) or (! $r->is_active))
         {
             return;
         }
@@ -122,37 +123,43 @@ sub _start_connection
     my $final_cb = sub { return ; };
 
     my $url = $self->_url;
-    if ($is_ftp)
     {
-        my $ftp = AnyEvent::FTP::Client->new( passive => 1 );
-        $r->_guard($ftp);
-        $ftp->connect($url->host, $url->port)->cb(sub {
-                $ftp->login($url->user, $url->password)->cb(sub {
-                        $ftp->type('I')->cb(sub {
-                                $ftp->retr(
-                                    $self->_url_path,
-                                    $on_body,
-                                    restart => $r->_start,
-                                );
-                            }
-                        );
-                    }
-                );
-            }
-        );
-    }
-    else
-    {
-        my $guard = http_get $url,
-        headers => { 'Range'
-            => sprintf("bytes=%d-%d", $r->_start, $r->_end-1)
-        },
-        on_body => $on_body,
-        $final_cb;
+        my $active_seq = $r->_get_next_active_seq;
 
-        $r->_guard($guard);
+        my $seq_on_body = sub { return $on_body->($active_seq, @_); };
 
-        $guard = '';
+        if ($is_ftp)
+        {
+            my $ftp = AnyEvent::FTP::Client->new( passive => 1 );
+            $r->_guard($ftp);
+            $ftp->connect($url->host, $url->port)->cb(sub {
+                    $ftp->login($url->user, $url->password)->cb(sub {
+                            $ftp->type('I')->cb(sub {
+                                    $ftp->retr(
+                                        $self->_url_path,
+                                        $seq_on_body,
+                                        restart => $r->_start,
+                                    );
+                                }
+                            );
+                        }
+                    );
+                }
+            );
+        }
+        else
+        {
+            my $guard = http_get $url,
+            headers => { 'Range'
+                => sprintf("bytes=%d-%d", $r->_start, $r->_end-1)
+            },
+            on_body => $seq_on_body,
+            $final_cb;
+
+            $r->_guard($guard);
+
+            $guard = '';
+        }
     }
 
     return;
