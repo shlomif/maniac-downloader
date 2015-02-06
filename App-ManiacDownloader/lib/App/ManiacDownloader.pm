@@ -12,13 +12,13 @@ use URI;
 use AnyEvent::HTTP qw/http_head http_get/;
 use AnyEvent::FTP::Client;
 use Getopt::Long qw/GetOptionsFromArray/;
-use File::Basename qw(basename);
 use Fcntl qw( SEEK_SET );
 use List::UtilsBy qw(max_by);
 use JSON::MaybeXS qw(decode_json encode_json);
 
 use App::ManiacDownloader::_SegmentTask;
 use App::ManiacDownloader::_BytesDownloaded;
+use App::ManiacDownloader::_File;
 
 our $VERSION = '0.0.11';
 
@@ -27,15 +27,12 @@ my $NUM_CONN_BYTES_THRESHOLD = 4_096 * 2;
 
 has '_finished_condvar' => (is => 'rw');
 has '_ranges' => (isa => 'ArrayRef', is => 'rw');
-has '_url' => (is => 'rw');
-has '_url_path' => (isa => 'Str', is => 'rw');
-has '_url_basename' => (isa => 'Str', is => 'rw');
-has '_is_ftp' => (isa => 'Bool', is => 'rw');
 has '_remaining_connections' => (isa => 'Int', is => 'rw');
 has '_stats_timer' => (is => 'rw');
 has '_last_timer_time' => (is => 'rw', isa => 'Num');
 has '_len' => (is => 'rw', isa => 'Int');
 has '_downloaded' => (is => 'rw', isa => 'App::ManiacDownloader::_BytesDownloaded', default => sub { return App::ManiacDownloader::_BytesDownloaded->new; });
+has '_file' => (is => 'rw', isa => 'App::ManiacDownloader::_File');
 
 sub _serialize
 {
@@ -50,20 +47,6 @@ sub _serialize
     };
 }
 
-sub _downloading_path
-{
-    my ($self) = @_;
-
-    return $self->_url_basename . '.mdown-intermediate';
-}
-
-sub _resume_info_path
-{
-    my ($self) = @_;
-
-    return $self->_url_basename . '.mdown-resume.json';
-}
-
 sub _start_connection
 {
     my ($self, $idx) = @_;
@@ -72,7 +55,7 @@ sub _start_connection
 
     sysseek( $r->_fh, $r->_start, SEEK_SET );
 
-    my $is_ftp = $self->_is_ftp;
+    my $is_ftp = $self->_file->_is_ftp;
 
     # We do these to make sure the cancellation guard does not get
     # preserved because it's in the context of the closures.
@@ -122,7 +105,7 @@ sub _start_connection
 
     my $final_cb = sub { return ; };
 
-    my $url = $self->_url;
+    my $url = $self->_file->_url;
     {
         my $active_seq = $r->_get_next_active_seq;
 
@@ -136,7 +119,7 @@ sub _start_connection
                     $ftp->login($url->user, $url->password)->cb(sub {
                             $ftp->type('I')->cb(sub {
                                     $ftp->retr(
-                                        $self->_url_path,
+                                        $self->_file->_url_path,
                                         $seq_on_body,
                                         restart => $r->_start,
                                     );
@@ -266,7 +249,7 @@ sub _init_from_len
 
     my $num_connections = $args->{num_connections};
     my $len = $self->_len;
-    my $url_basename = $self->_url_basename;
+    my $url_basename = $self->_file->_url_basename;
 
     my @stops = (map { int( ($len * $_) / $num_connections ) }
         0 .. ($num_connections-1));
@@ -301,7 +284,7 @@ sub _init_from_len
                 $r->_fh(
                     scalar(
                         _open_fh_for_read_write_without_clobbering(
-                            $self->_downloading_path(), $url_basename,
+                            $self->_file->_downloading_path(), $url_basename,
                         )
                     )
                 );
@@ -324,7 +307,7 @@ sub _init_from_len
 
     {
         no autodie;
-        unlink($self->_resume_info_path());
+        unlink($self->_file->_resume_info_path());
     }
 
     return;
@@ -334,7 +317,7 @@ sub _abort_signal_handler
 {
     my ($self) = @_;
 
-    open my $json_out_fh, '>:encoding(utf8)', $self->_resume_info_path();
+    open my $json_out_fh, '>:encoding(utf8)', $self->_file->_resume_info_path();
     print {$json_out_fh} encode_json($self->_serialize);
     close ($json_out_fh);
 
@@ -360,19 +343,12 @@ sub run
     my $url_s = shift(@argv)
         or die "No url given.";
 
-    my $url = URI->new($url_s);
-    $self->_url($url);
+    $self->_file(
+        App::ManiacDownloader::_File->new
+    );
+    $self->_file->_set_url($url_s);
 
-    my $url_path = $url->path();
-    $self->_url_path($url_path);
-
-    my $url_basename = basename($url_path);
-    $self->_url_basename($url_basename);
-
-    my $is_ftp = ($url->scheme eq 'ftp');
-    $self->_is_ftp($is_ftp);
-
-    if (-e $self->_url_basename)
+    if (-e $self->_file->_url_basename)
     {
         print STDERR "File appears to have already been downloaded. Quitting.\n";
         return;
@@ -382,9 +358,9 @@ sub run
         scalar(AnyEvent->condvar)
     );
 
-    if (-e $self->_resume_info_path)
+    if (-e $self->_file->_resume_info_path)
     {
-        my $record = decode_json(_slurp($self->_resume_info_path));
+        my $record = decode_json(_slurp($self->_file->_resume_info_path));
         $self->_len($record->{_len});
         $self->_downloaded->_my_init($record->{_bytes_dled});
         $self->_remaining_connections($record->{_remaining_connections});
@@ -398,13 +374,15 @@ sub run
     }
     else
     {
-        if ($is_ftp)
+        my $url = $self->_file->_url;
+
+        if ($self->_file->_is_ftp)
         {
             my $ftp = AnyEvent::FTP::Client->new( passive => 1 );
             $ftp->connect($url->host, $url->port)->recv;
             $ftp->login($url->user, $url->password)->recv;
             $ftp->type('I')->recv;
-            $ftp->size( $self->_url_path)->cb(
+            $ftp->size( $self->_file->_url_path)->cb(
                 sub {
                     my $len = shift->recv;
 
@@ -437,7 +415,7 @@ sub run
 
     if (! $self->_remaining_connections())
     {
-        rename($self->_downloading_path(), $self->_url_basename());
+        rename($self->_file->_downloading_path(), $self->_file->_url_basename());
     }
 
     return;
