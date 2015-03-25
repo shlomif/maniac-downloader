@@ -450,6 +450,20 @@ that if a segment of the downloaded file finishes, then it splits the
 largest remaining segment, and starts another new download, so the slowest
 downloads won't delay the completion time by much.
 
+=head1 Answers to Questions about Maniac Downloader
+
+=head2 Does Maniac Downloader always guarantee the best possible speed of download?
+
+The short answer is: “No”. The longer answer is that in today’s Internet
+and networking world, there are simply too many factors at play to make sure
+that downloading using a certain way will always be the fastest. Maniac
+Downloader uses a certain scheme which may make things faster on certain
+conditions (namely that individual connections is being capped), but it may
+make the performance somewhat worse as well.
+
+One thing we hope to guarantee is that it won’t make the download time B<much>
+longer. If it does, please let us know.
+
 =head1 METHODS
 
 =head2 $self->run({argv => [@ARGV]})
