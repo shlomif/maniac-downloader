@@ -14,7 +14,7 @@ my @url_strings;
 GetOptions(
     'urls=s' => \@url_strings,
 ) or die "Error in inputting command-line parameters";
- 
+
 my $url_s = shift(@url_strings);
 
 if (! length($url_s))
@@ -36,7 +36,7 @@ POE::Component::Client::HTTP->spawn(
     Timeout   => 3,                    # defaults to 180 seconds
     Streaming => (4 * 1024),                  # defaults to 0 (off)
 );
- 
+
 POE::Session->create(
     inline_states => {
         _start => sub {
@@ -63,7 +63,7 @@ POE::Session->create(
 
 POE::Kernel->run();
 exit;
- 
+
 # This is the sub which is called when the session receives a
 # 'response' event.
 sub response_handler {
