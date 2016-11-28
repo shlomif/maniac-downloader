@@ -20,7 +20,7 @@ use App::ManiacDownloader::_SegmentTask;
 use App::ManiacDownloader::_BytesDownloaded;
 use App::ManiacDownloader::_File;
 
-our $VERSION = '0.0.12';
+our $VERSION = 'v0.0.12';
 
 my $DEFAULT_NUM_CONNECTIONS = 4;
 my $NUM_CONN_BYTES_THRESHOLD = 4_096 * 2;
