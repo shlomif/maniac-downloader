@@ -1,3 +1,4 @@
 syntax: regexp
 ^App-ManiacDownloader/\.build/
+^App-ManiacDownloader/\.tidyall\.d/
 ^perl-downloader/linux-3\.1\.tar\.xz$
