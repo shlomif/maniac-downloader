@@ -25,11 +25,11 @@ my $NUM_CONN_BYTES_THRESHOLD = 4_096 * 2;
 
 has '_finished_condvar'      => ( is  => 'rw' );
 has '_ranges'                => ( isa => 'ArrayRef', is => 'rw' );
-has '_remaining_connections' => ( isa => 'Int', is => 'rw' );
+has '_remaining_connections' => ( isa => 'Int',      is => 'rw' );
 has '_stats_timer'           => ( is  => 'rw' );
 has '_last_timer_time'       => ( is  => 'rw', isa => 'Num' );
 has '_len'                   => ( is  => 'rw', isa => 'Int' );
-has '_downloaded' => (
+has '_downloaded'            => (
     is      => 'rw',
     isa     => 'App::ManiacDownloader::_BytesDownloaded',
     default => sub { return App::ManiacDownloader::_BytesDownloaded->new; }
@@ -262,7 +262,7 @@ sub _init_from_len
             App::ManiacDownloader::_SegmentTask->new(
                 _start => $stops[$_],
                 _end   => $stops[ $_ + 1 ],
-                )
+            )
         } 0 .. ( $num_connections - 1 )
     );
 

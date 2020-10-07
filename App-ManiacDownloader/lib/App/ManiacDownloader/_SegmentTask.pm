@@ -8,9 +8,9 @@ use MooX qw/late/;
 use List::Util qw/min/;
 
 has [ '_start', '_end' ] => ( is => 'rw', isa => 'Int', );
-has '_fh' => ( is => 'rw', );
-has 'is_active' => ( is => 'rw', isa => 'Bool', default => 1 );
-has '_downloaded' => (
+has '_fh'                => ( is => 'rw', );
+has 'is_active'          => ( is => 'rw', isa => 'Bool', default => 1 );
+has '_downloaded'        => (
     is      => 'rw',
     isa     => 'App::ManiacDownloader::_BytesDownloaded',
     default => sub { return App::ManiacDownloader::_BytesDownloaded->new; },

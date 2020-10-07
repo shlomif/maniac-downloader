@@ -9,8 +9,8 @@ use File::Basename qw(basename);
 use URI;
 
 has '_url'          => ( is  => 'rw' );
-has '_url_path'     => ( isa => 'Str', is => 'rw' );
-has '_url_basename' => ( isa => 'Str', is => 'rw' );
+has '_url_path'     => ( isa => 'Str',  is => 'rw' );
+has '_url_basename' => ( isa => 'Str',  is => 'rw' );
 has '_is_ftp'       => ( isa => 'Bool', is => 'rw' );
 
 sub _set_url
